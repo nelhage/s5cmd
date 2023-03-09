@@ -109,7 +109,9 @@ func newS3Storage(ctx context.Context, opts Options) (*S3, error) {
 	// terms of CPU time.
 	uploadSvc := s3.New(awsSession, aws.NewConfig().WithS3DisableContentMD5Validation(true))
 	uploadSvc.Handlers.Sign.PushFront(func(r *request.Request) {
-		r.HTTPRequest.Header.Add("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
+		if _, ok := r.HTTPRequest.Header["X-Amz-Content-Sha256"]; !ok {
+			r.HTTPRequest.Header.Set("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
+		}
 	})
 
 	return &S3{
