@@ -102,15 +102,20 @@ func newS3Storage(ctx context.Context, opts Options) (*S3, error) {
 	// operations, so we don't set it on the API client. The API
 	// client will not be used to send large amounts of data, so
 	// we're fine paying the cost of hashing there, anyways.
-	dataSvc := s3.New(awsSession, aws.NewConfig().WithS3DisableContentMD5Validation(true))
-	dataSvc.Handlers.Sign.PushFront(func(r *request.Request) {
+	downloadSvc := s3.New(awsSession, aws.NewConfig().WithS3DisableContentMD5Validation(true))
+
+	// For uploads, we set X-Amz-Content-Sha256 to force the SDK
+	// not to checksum object contents, which is expensive in
+	// terms of CPU time.
+	uploadSvc := s3.New(awsSession, aws.NewConfig().WithS3DisableContentMD5Validation(true))
+	uploadSvc.Handlers.Sign.PushFront(func(r *request.Request) {
 		r.HTTPRequest.Header.Add("X-Amz-Content-Sha256", "UNSIGNED-PAYLOAD")
 	})
 
 	return &S3{
 		api:              s3.New(awsSession),
-		downloader:       s3manager.NewDownloaderWithClient(dataSvc),
-		uploader:         s3manager.NewUploaderWithClient(dataSvc),
+		downloader:       s3manager.NewDownloaderWithClient(downloadSvc),
+		uploader:         s3manager.NewUploaderWithClient(uploadSvc),
 		endpointURL:      endpointURL,
 		dryRun:           opts.DryRun,
 		useListObjectsV1: opts.UseListObjectsV1,
