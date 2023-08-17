@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager/s3manageriface"
 
 	"github.com/peak/s5cmd/log"
+	"github.com/peak/s5cmd/log/stat"
 	"github.com/peak/s5cmd/storage/url"
 )
 
@@ -915,6 +916,21 @@ func (c *customRetryer) ShouldRetry(req *request.Request) bool {
 		shouldRetry = c.DefaultRetryer.ShouldRetry(req)
 	}
 
+	if errHasCode(req.Error, "SlowDown") {
+		stat.Collect("slow_down", nil)()
+		log.Info(log.ErrorMessage{
+			Command: fmt.Sprintf("request_id=%s", req.RequestID),
+			Err:     req.Error.Error(),
+		})
+	}
+	if errHasCode(req.Error, "InternalError") {
+		stat.Collect("internal_error", nil)()
+		log.Info(log.ErrorMessage{
+			Command: fmt.Sprintf("request_id=%s", req.RequestID),
+			Err:     req.Error.Error(),
+		})
+	}
+
 	// Errors related to tokens
 	if errHasCode(req.Error, "ExpiredToken") || errHasCode(req.Error, "ExpiredTokenException") || errHasCode(req.Error, "InvalidToken") {
 		return false
@@ -924,6 +940,10 @@ func (c *customRetryer) ShouldRetry(req *request.Request) bool {
 		err := fmt.Errorf("retryable error: %v", req.Error)
 		msg := log.DebugMessage{Err: err.Error()}
 		log.Debug(msg)
+	}
+
+	if shouldRetry {
+		stat.Collect("s3_retry", nil)()
 	}
 
 	return shouldRetry
